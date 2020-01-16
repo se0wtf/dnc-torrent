@@ -4,6 +4,8 @@ import (
 	"dnc-torrent/internal/service"
 	"flag"
 	"github.com/spf13/cobra"
+	"github.com/marksamman/bencode"
+	"os"
 )
 
 var (
@@ -37,4 +39,16 @@ func run(cmd *cobra.Command, args []string) {
 		service.Sugar.Fatal("torrentPath is mandatory")
 	}
 
+	file, err := os.Open(torrentPath)
+	if err != nil {
+		service.Sugar.Error(err)
+	}
+	defer file.Close()
+
+	dict, err := bencode.Decode(file)
+	if err != nil {
+		service.Sugar.Error(err)
+	}
+
+	service.Sugar.Debugf("Announce: %s", dict["announce"].(string))
 }
