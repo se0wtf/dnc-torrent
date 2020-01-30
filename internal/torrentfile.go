@@ -14,7 +14,7 @@ type TorrentFile struct {
 	PiecesHash [][20]byte
 }
 
-func (t *TorrentFile) BuildTrackerURL(peerID []byte, port uint16) (string, error) {
+func (t *TorrentFile) BuildTrackerURL(peerID [20]byte, port uint16) (string, error) {
 	base, err := url.Parse(t.Announce)
 	if err != nil {
 		return "", err

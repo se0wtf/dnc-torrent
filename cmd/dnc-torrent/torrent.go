@@ -2,20 +2,18 @@ package main
 
 import (
 	"dnc-torrent/internal"
-	"encoding/binary"
 	"flag"
-	"fmt"
 	bencode "github.com/jackpal/bencode-go"
 	"github.com/spf13/cobra"
+	"log"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
+	"time"
 )
 
 var (
 	torrentPath string
-	peers [][6]byte
 )
 
 func main() {
@@ -58,14 +56,19 @@ func run(cmd *cobra.Command, args []string) {
 
 	internal.Sugar.Debugf("Announce: %s, FileSize: %dMb, PieceSize: %dKb", tf.Announce, tf.Filesize/1024/2014, tf.Blocksize/1024)
 
-	peerId := make([]byte, 20)
-	rand.Read(peerId)
+	sPeerId := make([]byte, 20)
+	rand.Read(sPeerId[:])
+
+	var peerId [20]byte
+	copy(peerId[:], sPeerId)
 
 	url, err  := tf.BuildTrackerURL(peerId, 3889)
 	if err != nil {
 		internal.Sugar.Fatalf("Error: %v", err)
 	}
-	resp, err := http.Get(url)
+
+	c := &http.Client{Timeout: 15 * time.Second}
+	resp, err := c.Get(url)
 	if err != nil {
 		internal.Sugar.Fatalf("Error: %v", err)
 	}
@@ -76,28 +79,27 @@ func run(cmd *cobra.Command, args []string) {
 
 	internal.Sugar.Debugf("Interval: %d, NumPeers: %d", btr.Interval, len(btr.SplitPeers()))
 
-	peers, err := Unmarshal([]byte(btr.Peers))
+	peers, err := internal.UnmarshalPeers([]byte(btr.Peers))
 	if err != nil {
 		internal.Sugar.Fatalf("Error: %v", err)
 	}
+
+	internal.Sugar.Debugf("PeerId: %v (%d), Hash: %+v (%d)", peerId, len(peerId), tf.InfoHash, len(tf.InfoHash))
+
 	for _, p := range peers {
-		internal.Sugar.Infof("IP: %s:%d", p.IP.String(), p.Port)
+		go TestHandshake(p, tf.InfoHash, peerId)
 	}
+
+	time.Sleep(1*time.Minute)
 }
 
-// Unmarshal parses peer IP addresses and ports from a buffer
-func Unmarshal(peersBin []byte) ([]internal.Peer, error) {
-	const peerSize = 6 // 4 for IP, 2 for port
-	numPeers := len(peersBin) / peerSize
-	if len(peersBin)%peerSize != 0 {
-		err := fmt.Errorf("Received malformed peers")
-		return nil, err
+func TestHandshake(p *internal.Peer, infohash, peerId [20]byte) {
+
+	_, err := internal.New(*p, peerId, infohash)
+	if err != nil {
+		log.Printf("Could not handshake with %s. Err: %v. Disconnecting\n", p.Address(), err)
+	}else {
+		log.Printf("Completed handshake with %s\n", p.Address())
 	}
-	peers := make([]internal.Peer, numPeers)
-	for i := 0; i < numPeers; i++ {
-		offset := i * peerSize
-		peers[i].IP = net.IP(peersBin[offset : offset+4])
-		peers[i].Port = binary.BigEndian.Uint16(peersBin[offset+4 : offset+6])
-	}
-	return peers, nil
+
 }
