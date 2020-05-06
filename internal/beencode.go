@@ -7,6 +7,11 @@ import (
 	"github.com/jackpal/bencode-go"
 )
 
+type BencodeTorrent struct {
+	Announce string      `bencode:"announce"`
+	Info     bencodeInfo `bencode:"info"`
+}
+
 type bencodeInfo struct {
 	Pieces      string `bencode:"pieces"`
 	// piece size (bytes)
@@ -15,11 +20,6 @@ type bencodeInfo struct {
 	Length      int    `bencode:"length"`
 	// file name
 	Name        string `bencode:"name"`
-}
-
-type BencodeTorrent struct {
-	Announce string      `bencode:"announce"`
-	Info     bencodeInfo `bencode:"info"`
 }
 
 type BencodeTrackerResp struct {
@@ -41,7 +41,8 @@ func (b *BencodeTorrent) ToTorrentFile() *TorrentFile {
 	return tf
 }
 
-func (i *bencodeInfo) hash() ([20]byte) {
+// Unique identifier of the torrent for the tracker/peers
+func (i *bencodeInfo) hash() [20]byte {
 	var buf bytes.Buffer
 	err := bencode.Marshal(&buf, *i)
 	if err != nil {
@@ -51,11 +52,12 @@ func (i *bencodeInfo) hash() ([20]byte) {
 	return h
 }
 
-func (i *bencodeInfo) splitPieceHashes() ([][20]byte) {
+// return an array of piece hash
+func (i *bencodeInfo) splitPieceHashes() [][20]byte {
 	hashLen := 20 // Length of SHA-1 hash
 	buf := []byte(i.Pieces)
 	if len(buf)%hashLen != 0 {
-		fmt.Errorf("Received malformed pieces of length %d", len(buf))
+		fmt.Errorf("received malformed pieces of length %d", len(buf))
 		return nil
 	}
 	numHashes := len(buf) / hashLen
@@ -67,11 +69,13 @@ func (i *bencodeInfo) splitPieceHashes() ([][20]byte) {
 	return hashes
 }
 
-func (tr *BencodeTrackerResp) SplitPeers() ([][6]byte) {
+// split peers from tracker response
+// return an array of peer
+func (tr *BencodeTrackerResp) SplitPeers() [][6]byte {
 	hashLen := 6
 	buf := []byte(tr.Peers)
 	if len(buf)%hashLen != 0 {
-		fmt.Errorf("Received malformed pieces of length %d", len(buf))
+		fmt.Errorf("received malformed pieces of length %d", len(buf))
 		return nil
 	}
 	numHashes := len(buf) / hashLen
